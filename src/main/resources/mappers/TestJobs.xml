@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="TestJobs">
+
+    <update id="paginateCopy">
+        INSERT INTO target_data (id, payload)
+        SELECT id, payload
+        FROM source_data
+        ORDER BY id ASC
+        LIMIT #{limit} OFFSET #{offset}
+
+        ON CONFLICT (id) DO NOTHING
+    </update>
+
+    <insert id="batchCopy" parameterType="map">
+        INSERT INTO target_data (id, payload)
+        SELECT #{col1}::NUMERIC, #{col2}
+        ON CONFLICT (id) DO NOTHING
+    </insert>
+
+    <delete id="deleteBatchCopy" parameterType="map">
+        DELETE FROM target_data
+    </delete>
+
+</mapper>
