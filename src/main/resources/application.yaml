@@ -1,16 +1,18 @@
 spring:
-  application:
-    name: temporal-demo
   datasource:
     url: jdbc:postgresql://localhost:5432/postgres
     username: postgres
     password: password
     driver-class-name: org.postgresql.Driver
+  temporal:
+    connection:
+      target: localhost:7233
+    namespace: default
   batch:
     job:
-      enabled: false # Prevents Spring from running all Jobs automatically on startup
+      enabled: false
     jdbc:
-      initialize-schema: always # Ensures tables are created if you move to a new DB
+      table-prefix: batch.BATCH_
 
 mybatis:
   mapper-locations: classpath:mappers/*.xml

@@ -23,5 +23,10 @@ class BatchWorkflowImpl  : BatchWorkflow {
 
         activities.deleteBatchJobData()
         activities.runSpringBatchJob(filePath, mybatisId)
+
+
+
+
+
     }
 }

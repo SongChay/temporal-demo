@@ -17,9 +17,9 @@ class TemporalConfig {
 
     private val taskQueue = "DATA_JOBS_QUEUE"
 
-    @Bean
-    fun serviceStubs(): WorkflowServiceStubs = WorkflowServiceStubs.newLocalServiceStubs()
-
+//    @Bean
+//    fun serviceStubs(): WorkflowServiceStubs = WorkflowServiceStubs.newLocalServiceStubs()
+////
     @Bean
     fun workflowClient(stubs: WorkflowServiceStubs): WorkflowClient = WorkflowClient.newInstance(stubs)
 
