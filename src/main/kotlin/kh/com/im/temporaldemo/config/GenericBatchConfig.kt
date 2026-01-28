@@ -4,6 +4,7 @@ import org.apache.ibatis.session.SqlSessionFactory
 import org.mybatis.spring.batch.MyBatisBatchItemWriter
 import org.mybatis.spring.batch.builder.MyBatisBatchItemWriterBuilder
 import org.slf4j.LoggerFactory
+import org.springframework.batch.core.annotation.AfterStep
 import org.springframework.batch.core.annotation.AfterWrite
 import org.springframework.batch.core.annotation.BeforeStep
 import org.springframework.batch.core.configuration.annotation.StepScope
@@ -22,10 +23,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.io.FileSystemResource
-import org.springframework.core.retry.RetryPolicy
 import org.springframework.transaction.PlatformTransactionManager
-import java.time.Duration
-import java.time.temporal.ChronoUnit
 
 @Configuration
 //@EnableJdbcJobRepository
@@ -38,25 +36,26 @@ class GenericBatchConfig(
     @Bean
     @StepScope
     fun genericCsvReader(
-        @Value("#{jobParameters}") allParams: Map<String, Any>? // Inject the whole map
+        @Value("#{jobParameters['filePath']}") path: String?
     ): FlatFileItemReader<Map<String, Any>> {
-
-        val path =
-            allParams?.get("filePath").toString() ?: throw IllegalArgumentException("filePath job parameter is missing")
+        val filePath = path ?: throw IllegalArgumentException("filePath is missing")
 
         return FlatFileItemReaderBuilder<Map<String, Any>>()
             .name("genericReader")
-            .resource(FileSystemResource(path)) // Use the safe 'path' variable
+            .resource(FileSystemResource(filePath))
+            // DO NOT use linesToSkip(1) if you want to use the first line as headers
             .linesToSkip(1)
             .lineMapper(DefaultLineMapper<Map<String, Any>>().apply {
                 setLineTokenizer(DelimitedLineTokenizer().apply {
-                    setNames("col1", "col2", "col3")
-                    setStrict(false)
+                    // If you leave names empty here, you must map by index in the FieldSetMapper
                 })
                 setFieldSetMapper { fieldSet ->
                     val row = mutableMapOf<String, Any>()
-                    fieldSet.properties.stringPropertyNames().forEach { key ->
-                        row[key] = fieldSet.properties.getProperty(key)
+                    // Map dynamically by index to ensure NO records are skipped as "headers"
+                    for (i in 0 until fieldSet.fieldCount) {
+                        val value = fieldSet.readString(i)
+                        // You can use a generic key or lookup a header map if you loaded one
+                        row["col${i + 1}"] = value ?: ""
                     }
                     row
                 }
@@ -91,15 +90,17 @@ class GenericBatchConfig(
             .writer(writer)
             .listener(ModernOffsetLogger())
             .faultTolerant()
-            .retryLimit(3)
-            .retry(Exception::class.java)
-            .retryPolicy(
-                RetryPolicy.builder()
-                    .includes(Exception::class.java)
-                    .delay(Duration.of(5, ChronoUnit.SECONDS))
-                    .multiplier(1.0)
-                    .build()
-            )
+            .skip(Exception::class.java)
+            .skipLimit(Long.MAX_VALUE)
+//            .retryLimit(3)
+//            .retry(Exception::class.java)
+//            .retryPolicy(
+//                RetryPolicy.builder()
+//                    .includes(Exception::class.java)
+//                    .delay(Duration.of(5, ChronoUnit.SECONDS))
+//                    .multiplier(1.0)
+//                    .build()
+//            )
             .build()
     }
 
@@ -127,6 +128,33 @@ class ModernOffsetLogger {
         val offset = stepExecution.readCount
         logger.info(">> Annotation Log | Offset: $offset | Limit: $limit")
     }
+
+    @AfterStep
+    fun afterRead(stepExecution: StepExecution) {
+        val readCount = stepExecution.readCount
+        val writeCount = stepExecution.writeCount
+        val readSkips = stepExecution.readSkipCount
+        val processSkips = stepExecution.processSkipCount
+        val writeSkips = stepExecution.writeSkipCount
+
+        val totalProcessed = readCount + readSkips // Total records touched
+
+        logger.info(
+            """
+            |
+            |=== STEP SUMMARY: ${stepExecution.stepName} ===
+            |Total Records Read:    $readCount
+            |Total Records Written: $writeCount
+            |Read Skips:            $readSkips
+            |Process Skips:         $processSkips
+            |Write Skips:           $writeSkips
+            |-------------------------------------------
+            |Total Count Verified:  $totalProcessed
+            |===========================================
+        """.trimMargin()
+        )
+    }
+
 
 //    @BeforeWrite
 //    fun beforeWrite(items: Chunk<*>) {
